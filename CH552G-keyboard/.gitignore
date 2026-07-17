@@ -1,15 +1,39 @@
-# dot files
-/.vscode/launch.json
-/.settings
-/.eide/log
-/.eide.usr.ctx.json
+# --- Keil / UVision build outputs ---
+Objects/
+Listings/
+*.obj
+*.o
+*.hex
+*.htm
+*.lnp
+*.m51
+*.lst
+*.map
+*.ie
+*.bak
 
-# project out
-/build
-/bin
-/obj
-/out
+# --- IDE / Editor ---
+.vscode/launch.json
+.settings/
+.idea/
+*.swp
+*.swo
+*~
 
-# eide template
+# --- EIDE (Embedded IDE) ---
+/eide/log/
+.eide.usr.ctx.json
+
+# --- Project build dirs ---
+/build/
+/bin/
+/obj/
+/out/
+
+# --- EIDE template ---
 *.ept
 *.eide-template
+
+# --- OS files ---
+Thumbs.db
+.DS_Store

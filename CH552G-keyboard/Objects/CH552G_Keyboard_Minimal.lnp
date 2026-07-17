@@ -1,6 +1,0 @@
-".\Objects\STARTUP.obj",
-".\Objects\main.obj",
-".\Objects\div_usb.obj",
-".\Objects\keybord.obj" 
-TO ".\Objects\CH552G_Keyboard_Minimal" 
-PRINT(".\Listings\CH552G_Keyboard_Minimal.m51") RAMSIZE(256) 
