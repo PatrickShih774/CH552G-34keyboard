@@ -136,3 +136,5 @@ CH554EVT/               # CH554 参考示例代码
 
 - [WCH 沁恒微电子](https://www.wch.cn) — CH552/CH554 芯片及官方资料
 - 参考例程基于 WCH CH554 评估板示例代码（`CH554EVT/`）
+- 源项目 [最丐数字键盘](https://oshwhub.com/yANgZEN/zui-gai-shuo-zi-jian-pan) — 本固件对应的硬件设计最初源于此项目
+- [yANgZEN](https://oshwhub.com/yangzen/works) — 感谢原始作者的硬件开源工作
