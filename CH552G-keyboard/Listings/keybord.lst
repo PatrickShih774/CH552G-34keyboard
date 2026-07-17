@@ -1,0 +1,252 @@
+C51 COMPILER V9.60.0.0   KEYBORD                                                           03/19/2026 16:24:21 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE KEYBORD
+OBJECT MODULE PLACED IN .\Objects\keybord.obj
+COMPILER INVOKED BY: D:\Keil_v5\C51\BIN\C51.EXE keybord.c OPTIMIZE(9,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\k
+                    -eybord.lst) TABS(2) OBJECT(.\Objects\keybord.obj)
+
+line level    source
+
+   1          #include "keybord.h"
+   2          
+   3          uchar bdata TEMP_Byte;
+   4          
+   5          sbit Bit0 = TEMP_Byte ^ 0;
+   6          sbit Bit1 = TEMP_Byte ^ 1;
+   7          sbit Bit2 = TEMP_Byte ^ 2;
+   8          sbit Bit3 = TEMP_Byte ^ 3;
+   9          sbit Bit4 = TEMP_Byte ^ 4;
+  10          sbit Bit5 = TEMP_Byte ^ 5;
+  11          sbit Bit6 = TEMP_Byte ^ 6;
+  12          sbit Bit7 = TEMP_Byte ^ 7;
+  13          
+  14          uchar HIDKey[8] = {0};
+  15          
+  16          uchar code key_code[17] =
+  17          {
+  18              HID_KEYBPAD_8,    HID_KEYBPAD_4, HID_KEYBPAD_6, HID_KEYBPAD_2,
+  19              HID_KEYBPAD_NUM_LOCK, HID_KEYBPAD_DIVIDE, HID_KEYBPAD_MULTIPLY, HID_KEYBPAD_SUBTRACT,
+  20              HID_KEYBPAD_7, HID_KEYBPAD_9, HID_KEYBPAD_ADD, HID_KEYBPAD_1,
+  21              HID_KEYBPAD_3, HID_KEYBPAD_ENTER, HID_KEYBPAD_0, HID_KEYBPAD_DOT,
+  22              HID_KEYBPAD_5
+  23          };
+  24          
+  25          void key_delay()
+  26          {
+  27   1          uchar i;
+  28   1          i = 27;
+  29   1          while (--i);
+  30   1      }
+  31          
+  32          uchar keybord_scanning()
+  33          {
+  34   1          static uchar idata temp_old = 0;
+  35   1          uchar temp = 0;
+  36   1          uchar num = 0;
+  37   1          K1 = K2 = K3 = K4 = 1;
+  38   1      
+  39   1          TEMP_Byte = 0;
+  40   1          if (!K1)
+  41   1          {
+  42   2              temp = 1;
+  43   2              num++;
+  44   2          }
+  45   1          if (!K2)
+  46   1          {
+  47   2              temp = 2;
+  48   2              num++;
+  49   2          }
+  50   1          if (!K3)
+  51   1          {
+  52   2              temp = 3;
+  53   2              num++;
+  54   2          }
+C51 COMPILER V9.60.0.0   KEYBORD                                                           03/19/2026 16:24:21 PAGE 2   
+
+  55   1          if (!K4)
+  56   1          {
+  57   2              temp = 4;
+  58   2              num++;
+  59   2          }
+  60   1          if (num)
+  61   1              goto end;
+  62   1      
+  63   1          K1 = 0;
+  64   1          key_delay();
+  65   1          if (!K2)
+  66   1          {
+  67   2              temp = 5;
+  68   2              num++;
+  69   2          }
+  70   1          if (!K3)
+  71   1          {
+  72   2              temp = 6;
+  73   2              num++;
+  74   2          }
+  75   1          if (!K4)
+  76   1          {
+  77   2              temp = 7;
+  78   2              num++;
+  79   2          }
+  80   1          K1 = 1;
+  81   1      
+  82   1          K2 = 0;
+  83   1          key_delay();
+  84   1          if (!K1)
+  85   1          {
+  86   2              temp = 8;
+  87   2              num++;
+  88   2          }
+  89   1          if (!K3)
+  90   1          {
+  91   2              temp = 9;
+  92   2              num++;
+  93   2          }
+  94   1          if (!K4)
+  95   1          {
+  96   2              temp = 10;
+  97   2              num++;
+  98   2          }
+  99   1          K2 = 1;
+ 100   1      
+ 101   1          K3 = 0;
+ 102   1          key_delay();
+ 103   1          if (!K1)
+ 104   1          {
+ 105   2              temp = 11;
+ 106   2              num++;
+ 107   2          }
+ 108   1          if (!K2)
+ 109   1          {
+ 110   2              temp = 12;
+ 111   2              num++;
+ 112   2          }
+ 113   1          if (!K4)
+ 114   1          {
+ 115   2              temp = 13;
+ 116   2              num++;
+C51 COMPILER V9.60.0.0   KEYBORD                                                           03/19/2026 16:24:21 PAGE 3   
+
+ 117   2          }
+ 118   1          K3 = 1;
+ 119   1      
+ 120   1          K4 = 0;
+ 121   1          key_delay();
+ 122   1          if (!K1)
+ 123   1          {
+ 124   2              temp = 14;
+ 125   2              num++;
+ 126   2          }
+ 127   1          if (!K2)
+ 128   1          {
+ 129   2              temp = 15;
+ 130   2              num++;
+ 131   2          }
+ 132   1          if (!K3)
+ 133   1          {
+ 134   2              temp = 16;
+ 135   2              num++;
+ 136   2          }
+ 137   1          K4 = 1;
+ 138   1      
+ 139   1      end:
+ 140   1          if (num <= 1)
+ 141   1              temp_old = temp;
+ 142   1          return temp_old;
+ 143   1      }
+ 144          
+ 145          uchar filter(uchar dat)
+ 146          {
+ 147   1          static uchar idata tick = 0;
+ 148   1          static uchar idata key_temp[4] = 0;
+ 149   1          static uchar idata key_old = 0;
+ 150   1          key_temp[tick++] = dat;
+ 151   1          tick &= 3;
+ 152   1          if (key_temp[0] == key_temp[1] &&
+ 153   1              key_temp[1] == key_temp[2] &&
+ 154   1              key_temp[2] == key_temp[3])
+ 155   1              key_old = key_temp[0];
+ 156   1          return key_old;
+ 157   1      }
+ 158          
+ 159          uchar keybord_trembling()
+ 160          {
+ 161   1          static uchar idata tick = 0;
+ 162   1          static uchar idata key_temp[4] = 0;
+ 163   1          static uchar idata key_cycle = 0;
+ 164   1          static uchar idata temp_old = 0;
+ 165   1          uchar temp;
+ 166   1      
+ 167   1          memset(HIDKey, 0, 8);
+ 168   1      
+ 169   1          temp = filter(keybord_scanning());
+ 170   1          if (temp)
+ 171   1          {
+ 172   2              if (temp_old == temp)
+ 173   2              {
+ 174   3                  tick++;
+ 175   3                  if (tick == 3)
+ 176   3                  {
+ 177   4                      if (temp <= 17 && HIDKey[1] < 6)
+ 178   4                      {
+C51 COMPILER V9.60.0.0   KEYBORD                                                           03/19/2026 16:24:21 PAGE 4   
+
+ 179   5                          HIDKey[2 + HIDKey[1]++] = key_code[temp - 1];
+ 180   5                      }
+ 181   4                  }
+ 182   3                  if (tick > 3)
+ 183   3                      tick = 3;
+ 184   3              }
+ 185   2              else
+ 186   2              {
+ 187   3                  temp_old = temp;
+ 188   3                  tick = 0;
+ 189   3              }
+ 190   2          }
+ 191   1          else
+ 192   1          {
+ 193   2              temp_old = 0;
+ 194   2              tick = 0;
+ 195   2          }
+ 196   1      
+ 197   1          Bit4 = num5;
+ 198   1          key_temp[key_cycle++] = TEMP_Byte;
+ 199   1          key_cycle &= 3;
+ 200   1      
+ 201   1          TEMP_Byte &= key_temp[0];
+ 202   1          TEMP_Byte &= key_temp[1];
+ 203   1          TEMP_Byte &= key_temp[2];
+ 204   1          TEMP_Byte &= key_temp[3];
+ 205   1      
+ 206   1          if (Bit0 && HIDKey[1] < 6)
+ 207   1              HIDKey[2 + HIDKey[1]++] = key_code[0];
+ 208   1          if (Bit1 && HIDKey[1] < 6)
+ 209   1              HIDKey[2 + HIDKey[1]++] = key_code[1];
+ 210   1          if (Bit2 && HIDKey[1] < 6)
+ 211   1              HIDKey[2 + HIDKey[1]++] = key_code[2];
+ 212   1          if (Bit3 && HIDKey[1] < 6)
+ 213   1              HIDKey[2 + HIDKey[1]++] = key_code[3];
+ 214   1      
+ 215   1          HIDKey[1] = 0;
+ 216   1          return 0;
+ 217   1      }
+ 218          
+ 219          uchar HIDKey_transfer()
+ 220          {
+ 221   1          return drv_usb_keyboard(HIDKey);
+ 222   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    446    ----
+   CONSTANT SIZE    =     17    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      9    ----
+   IDATA SIZE       =     14    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
