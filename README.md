@@ -15,7 +15,7 @@
 |------|------|
 | **MCU** | CH552G（增强型 E8051 内核，16MHz） |
 | **按键布局** | 34键 + EC11旋转编码器 |
-| **矩阵** | 7×5 行列扫描（7根IO扫描线） |
+| **扫描方式** | 7×5 行列查理复用扫描（7根IO扫描线） |
 | **编码器** | EC11 旋转编码器（音量调节） |
 | **指示灯** | P3.4 驱动 USB 状态 LED（低电平点亮） |
 | **USB** | 全速 USB 2.0 HID 设备，即插即用 |
@@ -136,5 +136,5 @@ CH554EVT/               # CH554 参考示例代码
 
 - [WCH 沁恒微电子](https://www.wch.cn) — CH552/CH554 芯片及官方资料
 - 参考例程基于 WCH CH554 评估板示例代码（`CH554EVT/`）
-- 源项目 [最丐数字键盘](https://oshwhub.com/yANgZEN/zui-gai-shuo-zi-jian-pan) — 本固件对应的硬件设计最初源于此项目
-- [yANgZEN](https://oshwhub.com/yangzen/works) — 感谢原始作者的硬件开源工作
+- 源项目 [最丐17Toutch机械数字键盘](https://oshwhub.com/yANgZEN/zui-gai-shuo-zi-jian-pan) — 本固件对应的硬件设计最初源于此项目
+- [画板当吃生菜](https://oshwhub.com/yangzen/works) — 感谢原始作者的硬件开源工作
