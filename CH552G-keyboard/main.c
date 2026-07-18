@@ -17,12 +17,30 @@ void system_init()
 
 void gpio_init()
 {
-    // LED引脚初始化
-    // P3.4设置为推挽输出
+    // LED引脚初始化 — P3.4 设为推挽输出
     P3_MOD_OC &= ~(1 << 4);
-
-    // 初始熄灭LED
     LED_OFF();
+
+    // 矩阵扫描引脚初始化 — 配置为准双向口（标准8051模式）
+    // 准双向口: MOD_OC=1, DIR_PU=1 → 输出1时弱上拉（可被按键拉低），输出0时强驱动
+    // 这是键盘矩阵扫描的正确配置，避免推挽强输出烧毁引脚或干扰扫描
+    // P3.0(K1), P3.1(K2), P3.3(K3)
+    P3_MOD_OC |= ((1 << 0) | (1 << 1) | (1 << 3));
+    P3_DIR_PU |= ((1 << 0) | (1 << 1) | (1 << 3));
+
+    // P1.1(K4), P1.5(K5), P1.6(K6), P1.7(K7)
+    P1_MOD_OC |= ((1 << 1) | (1 << 5) | (1 << 6) | (1 << 7));
+    P1_DIR_PU |= ((1 << 1) | (1 << 5) | (1 << 6) | (1 << 7));
+
+    // EC11 编码器引脚 — 准双向口输入模式，使能上拉
+    // P3.2(EC11_A), P1.4(EC11_B)
+    P3_MOD_OC |= (1 << 2);
+    P3_DIR_PU |= (1 << 2);
+    P1_MOD_OC |= (1 << 4);
+    P1_DIR_PU |= (1 << 4);
+
+    // 初始化所有矩阵扫描线为高电平
+    K1 = 1; K2 = 1; K3 = 1; K4 = 1; K5 = 1; K6 = 1; K7 = 1;
 }
 
 void T0_init()
@@ -77,6 +95,8 @@ void led_handler(void)
 
 void main()
 {
+    uchar i;
+
     system_init();
     gpio_init();
     T0_init();
@@ -84,16 +104,21 @@ void main()
     EA = 1;
     drv_usb_init();
 
+    // GPIO 和滤波器预热：运行若干轮扫描以稳定引脚电平
+    for (i = 0; i < 20; i++)
+    {
+        keybord_scanning();
+    }
+
     while (1)
     {
-        led_handler();  // LED状态控制
+        led_handler();           // LED状态控制
+        keybord_trembling();     // 键盘消抖与按键处理
+        ec11_handler();          // EC11旋转编码器处理
 
-        keybord_scanning();
-        keybord_trembling();
-        ec11_handler();  // EC11旋转编码器处理
-       // HIDKey_transfer();
-        if(!HIDKey_transfer())//确保不同时更新
-			MULKey_transfer();
+        if (!HIDKey_transfer())  // 发送键盘报告
+            MULKey_transfer();   // 发送多媒体报告（错开更新）
+
         delay_ms(1);
     }
 }

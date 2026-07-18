@@ -1,16 +1,5 @@
 #include "keybord.h"
 
-uchar bdata TEMP_Byte;
-
-sbit Bit0 = TEMP_Byte ^ 0;
-sbit Bit1 = TEMP_Byte ^ 1;
-sbit Bit2 = TEMP_Byte ^ 2;
-sbit Bit3 = TEMP_Byte ^ 3;
-sbit Bit4 = TEMP_Byte ^ 4;
-sbit Bit5 = TEMP_Byte ^ 5;
-sbit Bit6 = TEMP_Byte ^ 6;
-sbit Bit7 = TEMP_Byte ^ 7;
-
 uchar HIDKey[8] = {0};
 uchar MULKey[1] = {0}; // 多媒体按键数组
 
@@ -210,7 +199,6 @@ uchar keybord_scanning()
     uchar num = 0;
     K1 = K2 = K3 = K4 = K5 = K6 = K7 = 1;
 
-    TEMP_Byte = 0;
     // if (!K1)
     // {
     //     temp = 1;
@@ -502,14 +490,13 @@ uchar keybord_trembling()
 
     uchar temp;
 
-    memset(HIDKey, 0, 8);
-
     temp = filter(keybord_scanning());
 
     switch (state)
     {
     case KEY_STATE_IDLE:
-        // 空闲状态：检测按键按下
+        // 空闲状态：确保报告清零，检测按键按下
+        memset(HIDKey, 0, 8);
         if (temp != 0)
         {
             temp_old = temp;
@@ -519,7 +506,8 @@ uchar keybord_trembling()
         break;
 
     case KEY_STATE_DEBOUNCING:
-        // 消抖状态：连续确认按键
+        // 消抖状态：保持报告清零，连续确认按键
+        memset(HIDKey, 0, 8);
         if (temp == temp_old)
         {
             debounce_counter++;
@@ -540,7 +528,7 @@ uchar keybord_trembling()
 
     case KEY_STATE_PRESSED:
         // 按键已确认，执行发送（只发送一次）
-        if (!key_sent && temp <= 35)
+        if (!key_sent && temp > 0 && temp <= 35)
         {
             uchar current_key = key_code[temp - 1];
 
@@ -589,9 +577,10 @@ uchar keybord_trembling()
             }
         }
 
-        // 如果按键已释放，进入释放消抖
+        // 如果按键已释放，清零报告并进入释放消抖
         if (temp == 0)
         {
+            memset(HIDKey, 0, 8);
             debounce_counter = 0;
             state = KEY_STATE_RELEASED;
         }
@@ -614,25 +603,32 @@ uchar keybord_trembling()
                     long_press_started = 1;
                 }
 
-                // 只有在长按开始后才连续发送（每50ms发送一次）
-                if (long_press_started && (long_press_timer % 50 == 0) && HIDKey[1] < 6)
+                // 长按开始后，持续保持按键在报告中（不脉冲）
+                // OS 的 typematic 机制会自动处理按键重复
+                if (long_press_started)
                 {
-                    HIDKey[2 + HIDKey[1]++] = current_key;
+                    uchar modifier = get_key_modifier(current_key);
+                    HIDKey[0] = modifier;
+                    HIDKey[2] = current_key;
+                    // HIDKey[1] 保持为 0（保留字节），其余键码槽位为空
                 }
             }
         }
         else if (temp == 0)
         {
-            // 按键释放，进入释放消抖
+            // 按键释放，清零报告并进入释放消抖
+            memset(HIDKey, 0, 8);
             debounce_counter = 0;
             state = KEY_STATE_RELEASED;
         }
         break;
 
     case KEY_STATE_RELEASED:
-        // 释放消抖状态
+        // 等待按键释放：保持按键按下状态（保留 HIDKey），确保组合键可靠
         if (temp == 0)
         {
+            // 按键已释放 - 清零报告发送释放信号
+            memset(HIDKey, 0, 8);
             debounce_counter++;
             // 释放消抖完成
             if (debounce_counter >= 3)
@@ -647,15 +643,18 @@ uchar keybord_trembling()
         }
         else if (temp == temp_old)
         {
-            // 按键仍然按住（可能是长按状态）
-            if (state == KEY_STATE_RELEASED && is_long_press_key(temp - 1))
+            // 按键仍然按住 - 保持 HIDKey 不变（按键持续按下，不脉冲）
+            // 由 OS typematic 机制处理按键重复
+            // 长按按键转入长按状态处理
+            if (is_long_press_key(temp - 1))
             {
                 state = KEY_STATE_LONG_PRESS;
             }
         }
         else
         {
-            // 检测到不同按键，立即处理新按键
+            // 检测到不同按键 - 释放当前按键，处理新按键
+            memset(HIDKey, 0, 8);
             state = KEY_STATE_IDLE;
             temp_old = 0;
             long_press_timer = 0;
@@ -669,17 +668,7 @@ uchar keybord_trembling()
         break;
     }
 
-    // 处理TEMP_Byte位操作（保留原有功能）
-    if (Bit0 && HIDKey[1] < 6)
-        HIDKey[2 + HIDKey[1]++] = key_code[0];
-    if (Bit1 && HIDKey[1] < 6)
-        HIDKey[2 + HIDKey[1]++] = key_code[1];
-    if (Bit2 && HIDKey[1] < 6)
-        HIDKey[2 + HIDKey[1]++] = key_code[2];
-    if (Bit3 && HIDKey[1] < 6)
-        HIDKey[2 + HIDKey[1]++] = key_code[3];
-
-    HIDKey[1] = 0;
+    HIDKey[1] = 0;  // 确保 HID 报告保留字节为 0
     return 0;
 }
 
@@ -703,51 +692,6 @@ uchar MULKey_transfer()
     else
         tick = 0;
     return flag;
-}
-// 声明外部函数
-extern void drv_usb_write_ep2(char *buf, uchar len);
-
-void send_H(void)
-{
-    uchar i;
-    uchar report[8];
-
-    // 等待 USB 就绪，等待约 3 秒
-    for (i = 0; i < 30; i++)
-    {
-        delay_ms(100);
-    }
-
-    // 构造 8 字节报告（与 HID 描述符匹配，不含报告 ID）
-    report[0] = HID_L_SHIFT;    // 修饰键：左 Shift
-    report[1] = 0;              // 保留字节
-    report[2] = HID_KEYBOARD_H; // 按键 1：H
-    report[3] = 0;              // 按键 2
-    report[4] = 0;              // 按键 3
-    report[5] = 0;              // 按键 4
-    report[6] = 0;              // 按键 5
-    report[7] = 0;              // 按键 6
-
-    // 发送按下 Shift + H，重复多次
-    for (i = 0; i < 10; i++)
-    {
-        drv_usb_write_ep2(report, 8);
-        delay_ms(10);
-    }
-
-    // 延时 100ms
-    delay_ms(100);
-
-    // 发送释放按键（全零）
-    memset(report, 0, 8);
-    for (i = 0; i < 10; i++)
-    {
-        drv_usb_write_ep2(report, 8);
-        delay_ms(10);
-    }
-
-    // 再延时 50ms
-    delay_ms(50);
 }
 
 /**
@@ -790,6 +734,13 @@ void ec11_handler(void)
 
             transition = (last_state << 2) | current_state;
 
+            // 无条件更新 last_state（无论本次转换是否为有效旋转）。
+            // 原因：EC11 机械触点抖动会产生短暂无效转换（如 00->11，两相同时跳变），
+            // 若只在有效旋转时更新 last_state，遇到无效转换时 last_state 永远不更新，
+            // 状态机将卡死在该转换上，后续旋转全部失效（表现为"触发一次就不工作"）。
+            // 无条件更新可保证持续跟踪编码器位置，最多漏掉一个事件但不会卡死。
+            last_state = current_state;
+
             // 顺时针判断
             if (transition == 0x01 || transition == 0x13 || transition == 0x32 || transition == 0x20)
             {
@@ -804,194 +755,10 @@ void ec11_handler(void)
                 MULKey[0] = HID_CONSUMER_VOLUME_DOWN;
                 MULKey_transfer();
             }
-
-            last_state = current_state;
         }
     }
     else
     {
         debounce = 0;
     }
-}
-
-/**
- * @brief 发送字符串 "Hello" 到 USB HID 键盘
- *
- * 使用 HIDKey_transfer() 函数发送数据
- * HIDKey[8] 数据格式（与 HID 描述符匹配，8字节，无报告 ID）：
- * [0] - 修饰键 (Modifier): Shift/Ctrl/Alt等
- * [1] - 保留字节 (Reserved)
- * [2] - 按键码 1
- * [3] - 按键码 2
- * [4] - 按键码 3
- * [5] - 按键码 4
- * [6] - 按键码 5
- * [7] - 按键码 6
- *
- * "Hello" 需要逐个字符发送，因为 HID 键盘一次最多支持 6 个按键
- */
-void sendHello(void)
-{
-    uchar i;
-    uchar result;
-
-    // 注意：此函数在 while(1) 循环之前调用
-    // 因此不会与 keybord_trembling 产生冲突
-
-    /*
-     * 发送 'H' (大写)
-     * HID_KEYBOARD_H = 11, 需要 Shift 修饰键
-     */
-    memset(HIDKey, 0, 8);
-    HIDKey[0] = HID_L_SHIFT;    // 左 Shift 按下
-    HIDKey[2] = HID_KEYBOARD_H; // H 键码
-
-    // 发送多次确保电脑接收到
-    for (i = 0; i < 5; i++)
-    {
-        result = HIDKey_transfer();
-        if (result)
-        {
-            // 发送成功，只需发送一次
-            break;
-        }
-        delay_ms(10);
-    }
-    delay_ms(50);
-
-    // 释放按键
-    memset(HIDKey, 0, 8);
-    for (i = 0; i < 5; i++)
-    {
-        result = HIDKey_transfer();
-        if (result)
-        {
-            break;
-        }
-        delay_ms(10);
-    }
-    delay_ms(50);
-
-    /*
-     * 发送 'e' (小写)
-     * HID_KEYBOARD_E = 8
-     */
-    memset(HIDKey, 0, 8);
-    HIDKey[2] = HID_KEYBOARD_E;
-
-    for (i = 0; i < 5; i++)
-    {
-        result = HIDKey_transfer();
-        if (result)
-        {
-            break;
-        }
-        delay_ms(10);
-    }
-    delay_ms(50);
-
-    // 释放按键
-    memset(HIDKey, 0, 8);
-    for (i = 0; i < 5; i++)
-    {
-        result = HIDKey_transfer();
-        if (result)
-        {
-            break;
-        }
-        delay_ms(10);
-    }
-    delay_ms(50);
-
-    /*
-     * 发送 'l' (小写)
-     * HID_KEYBOARD_L = 15
-     */
-    memset(HIDKey, 0, 8);
-    HIDKey[2] = HID_KEYBOARD_L;
-
-    for (i = 0; i < 5; i++)
-    {
-        result = HIDKey_transfer();
-        if (result)
-        {
-            break;
-        }
-        delay_ms(10);
-    }
-    delay_ms(50);
-
-    // 释放按键
-    memset(HIDKey, 0, 8);
-    for (i = 0; i < 5; i++)
-    {
-        result = HIDKey_transfer();
-        if (result)
-        {
-            break;
-        }
-        delay_ms(10);
-    }
-    delay_ms(50);
-
-    /*
-     * 发送第二个 'l' (小写)
-     */
-    memset(HIDKey, 0, 8);
-    HIDKey[2] = HID_KEYBOARD_L;
-
-    for (i = 0; i < 5; i++)
-    {
-        result = HIDKey_transfer();
-        if (result)
-        {
-            break;
-        }
-        delay_ms(10);
-    }
-    delay_ms(50);
-
-    // 释放按键
-    memset(HIDKey, 0, 8);
-    for (i = 0; i < 5; i++)
-    {
-        result = HIDKey_transfer();
-        if (result)
-        {
-            break;
-        }
-        delay_ms(10);
-    }
-    delay_ms(50);
-
-    /*
-     * 发送 'o' (小写)
-     * HID_KEYBOARD_O = 18
-     */
-    memset(HIDKey, 0, 8);
-    HIDKey[2] = HID_KEYBOARD_O;
-
-    for (i = 0; i < 5; i++)
-    {
-        result = HIDKey_transfer();
-        if (result)
-        {
-            break;
-        }
-        delay_ms(10);
-    }
-    delay_ms(50);
-
-    // 释放按键
-    memset(HIDKey, 0, 8);
-    for (i = 0; i < 5; i++)
-    {
-        result = HIDKey_transfer();
-        if (result)
-        {
-            break;
-        }
-        delay_ms(10);
-    }
-    delay_ms(50);
 }

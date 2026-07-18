@@ -304,7 +304,11 @@ void drv_usb_init(void)
 
 void drv_usb_write_ep2(char *buf, uchar len)
 {
-    while (UEP2_CTRL & MASK_UEP_T_RES == UEP_T_RES_ACK)
+    // 等待 EP2 发送就绪：UEP_T_RES 为 ACK 表示上一包仍在发送中。
+    // 注意必须加括号：== 优先级高于 &，原写法 UEP2_CTRL & MASK == ACK
+    // 会被解析为 UEP2_CTRL & (MASK == ACK) => UEP2_CTRL & 0 => while(0)，
+    // 等待逻辑完全失效，可能导致连续发送时覆盖正在传输的缓冲区，主机收到 CRC 错误包（xact error）。
+    while ((UEP2_CTRL & MASK_UEP_T_RES) == UEP_T_RES_ACK)
         ;
 
     len = (len > EP2_SIZE) ? EP2_SIZE : len;
@@ -340,23 +344,6 @@ uchar drv_usb_keyboard(uchar *p)
         drv_usb_write_ep2(temp, 9);
     }
     return flag;
-}
-/******************************
-功能：发送旋钮数据
-传入参数:
-wheel:滚轮变化量
-*******************************/
-void drv_usb_dial(int wheel)
-{
-    char buf_tx[4];
-
-    memset(buf_tx, 0, sizeof(buf_tx));
-
-    buf_tx[0] = 4;
-    buf_tx[1] = *((char *)&wheel + 1);
-    buf_tx[2] = *((char *)&wheel + 0);
-
-    drv_usb_write_ep2(buf_tx, 3);
 }
 /******************************
 功能：发送键盘数据

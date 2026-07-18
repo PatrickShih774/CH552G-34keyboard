@@ -169,7 +169,5 @@ uchar is_long_press_key(uchar key_index);
 uchar is_multimedia_key(uchar key_code_val);
 void ec11_handler(void);
 void delay_ms(uchar ms);
-void send_H(void);
-void sendHello(void);
 
 #endif
