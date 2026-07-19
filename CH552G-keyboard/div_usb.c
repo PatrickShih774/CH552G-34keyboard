@@ -255,6 +255,13 @@ char code Prod_Des[] = {0x10, 0x03, 'K', 0x00, 'e', 0x00, 'y', 0x00, 'b', 0x00, 
 
 char code Ser_Des[30] = {0};
 
+/**
+ * @brief USB 外设初始化
+ *
+ * 配置 USB 控制器为全速设备模式，使能设备上拉。
+ * 初始化 EP0（控制端点）、EP2（HID 中断 IN）、EP4（预留）。
+ * 设置 DMA 缓冲区地址，使能 USB 中断（挂起/传输/总线复位）。
+ */
 void drv_usb_init(void)
 {
     SetupReq = 0;
@@ -302,14 +309,24 @@ void drv_usb_init(void)
     IE_USB = 1;
 }
 
+/**
+ * @brief 向 USB EP2 写入数据并发送
+ *
+ * 等待上一包发送完成（T_RES == ACK 表示传输中），
+ * 然后将数据拷贝到 EP2 缓冲区并触发发送。
+ *
+ * @param buf 待发送数据缓冲区指针
+ * @param len 数据长度（超过 EP2_SIZE 时截断）
+ *
+ * @note 等待超时保护：若主机未轮询 EP2（枚举未完成、主机挂起或断连），
+ *       TX 永不完成，T_RES 恒为 ACK 会死锁主循环。超时后放弃本次发送，
+ *       待主机恢复轮询后自愈。
+ * @note == 优先级高于 &，原写法 UEP2_CTRL & MASK == ACK 被解析为
+ *       UEP2_CTRL & (MASK == ACK) => while(0)，等待逻辑完全失效。
+ *       必须加括号：(UEP2_CTRL & MASK_UEP_T_RES) == UEP_T_RES_ACK
+ */
 void drv_usb_write_ep2(char *buf, uchar len)
 {
-    // 等待 EP2 发送就绪：UEP_T_RES 为 ACK 表示上一包仍在发送中。
-    // 注意必须加括号：== 优先级高于 &，原写法 UEP2_CTRL & MASK == ACK
-    // 会被解析为 UEP2_CTRL & (MASK == ACK) => UEP2_CTRL & 0 => while(0)，
-    // 等待逻辑完全失效，可能导致连续发送时覆盖正在传输的缓冲区，主机收到 CRC 错误包（xact error）。
-    // 超时保护：若主机未轮询 EP2（枚举未完成、主机挂起或断连），TX 永不完成，
-    // T_RES 恒为 ACK 会死锁主循环。超时后放弃本次发送，待主机恢复轮询后自愈。
     {
         uint timeout = 10000;
         while ((UEP2_CTRL & MASK_UEP_T_RES) == UEP_T_RES_ACK)
@@ -325,15 +342,20 @@ void drv_usb_write_ep2(char *buf, uchar len)
     UEP2_T_LEN = len;
     UEP2_CTRL = UEP2_CTRL & ~MASK_UEP_T_RES | UEP_T_RES_ACK;
 }
-/******************************
-功能：发送键盘数据
-传入参数：
-p[0]:功能（左右的ctrl，shift，alt，win）
-p[1]:0
-p[2]~p[7]:对应六个按键的按键码
-带差分检测，数据不相同才上传
-返回值:无差异为0，反之为1
-*******************************/
+/**
+ * @brief 发送键盘 HID 报告（带差分检测）
+ *
+ * 报告格式（9 字节，含 ReportID）：
+ *   p[0] = 修饰键（Ctrl/Shift/Alt/Win 位图）
+ *   p[1] = 保留字节（恒为 0）
+ *   p[2..7] = 6 个按键键码
+ *
+ * 差分检测：与上次发送的键盘报告逐字节比较，
+ * 数据未变化时不发送以节省 USB 带宽。
+ *
+ * @param p 指向 8 字节键盘报告数据的指针
+ * @return 0 表示无变化未发送，1 表示已发送
+ */
 uchar drv_usb_keyboard(uchar *p)
 {
     static uchar idata temp[9] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -353,13 +375,18 @@ uchar drv_usb_keyboard(uchar *p)
     }
     return flag;
 }
-/******************************
-功能：发送键盘数据
-传入参数：
-dat:对应多媒体的按键功能码
-带差分检测，数据不相同才上传
-返回值:无差异为0，反之为1
-*******************************/
+/**
+ * @brief 发送 Consumer 多媒体 HID 报告（带差分检测 + 强制发送）
+ *
+ * 报告格式（3 字节）：
+ *   [0] = ReportID = 3
+ *   [1] = usage 低字节
+ *   [2] = usage 高字节（在用 usage 均 ≤ 0xFF，恒为 0）
+ *
+ * @param dat   多媒体按键功能码（Consumer Page usage）
+ * @param force 1 = 强制发送，跳过差分检测；0 = 仅数据变化时发送
+ * @return 0 表示无变化未发送，1 表示已发送
+ */
 uchar drv_usb_mul(uchar dat, uchar force)
 {
     // Consumer 报告：ReportID=3 + 16-bit usage（小端）。
@@ -384,6 +411,20 @@ uchar drv_usb_mul(uchar dat, uchar force)
 
 // LED 状态通过 SET_REPORT 输出报告接收，见 UIS_TOKEN_OUT | 0 处理
 
+/**
+ * @brief USB 中断服务函数
+ *
+ * 处理 USB 总线事件：
+ * - EP2 IN TX 完成 → 清除发送状态
+ * - EP4 IN/OUT → 预留端点处理
+ * - SETUP（EP0）→ 枚举/描述符/请求处理
+ * - EP0 IN → 分段传输续传
+ * - EP0 OUT → SET_REPORT（LED 状态）ACK
+ * - 总线复位 → 重置设备地址与端点状态
+ * - 挂起 → 进入低功耗模式（PD）
+ *
+ * 使用寄存器组 1（using 1）以避免与主循环寄存器冲突。
+ */
 void usb_handler(void) interrupt INT_NO_USB using 1
 {
     uchar len;

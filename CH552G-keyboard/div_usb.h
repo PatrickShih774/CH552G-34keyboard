@@ -17,8 +17,11 @@
 #define EP0_SIZE 64
 #define EP2_SIZE 64
 
+/** @brief 初始化 USB 外设（全速设备模式，HID 端点配置） */
 void drv_usb_init(void);
+/** @brief 发送键盘 HID 报告（9 字节含 ReportID，差分检测） */
 uchar drv_usb_keyboard(uchar *p);
+/** @brief 发送 Consumer 多媒体报告（3 字节，force=1 跳过差分检测） */
 uchar drv_usb_mul(uchar dat, uchar force);
 
 // USB连接状态变量（定义在div_usb.c中）

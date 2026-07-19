@@ -155,19 +155,32 @@ sbit LED_STATUS = P3 ^ 4; // 状态指示灯
 #define HID_CONSUMER_CHROME        35  // 0x23 - Chrome
 #define HID_CONSUMER_MULTI         131 // 0x83 - Multi
 
+/** @brief 键盘 HID 报告缓冲区（8 字节：修饰键 + 保留 + 6 键码） */
 extern uchar HIDKey[8];
-extern uchar MULKey[1]; // 多媒体按键数组
+/** @brief 多媒体按键值（0 表示无，非 0 表示 consumer usage 码） */
+extern uchar MULKey[1];
 
+/** @brief 7×? 矩阵扫描，返回按键索引（1~35，0=无） */
 uchar keybord_scanning(void);
+/** @brief 按键消抖状态机（5 状态），返回 0 */
 uchar keybord_trembling(void);
+/** @brief 发送键盘 HID 报告（差分检测），返回 1=已发送 */
 uchar HIDKey_transfer(void);
+/** @brief 发送多媒体 HID 报告（差分检测），返回 1=已发送 */
 uchar MULKey_transfer(void);
+/** @brief 获取按键码对应的修饰键（Ctrl/Alt 等），0=无修饰键 */
 uchar get_key_modifier(uchar key_code_val);
+/** @brief 获取按键索引对应的重复次数（如 00 键发 2 次） */
 uchar get_key_repeat_count(uchar key_index);
+/** @brief 获取按键索引对应的纯修饰键（无键码），0=不是纯修饰键 */
 uchar get_modifier_only_key(uchar key_index);
+/** @brief 检查按键索引是否支持长按连续发送，1=支持 */
 uchar is_long_press_key(uchar key_index);
+/** @brief 检查按键码是否为 Consumer Page 多媒体键，1=是 */
 uchar is_multimedia_key(uchar key_code_val);
+/** @brief EC11 旋转编码器处理（音量控制） */
 void ec11_handler(void);
+/** @brief 基于 Timer0 的毫秒级延时，同时喂狗 */
 void delay_ms(uchar ms);
 
 #endif

@@ -5,6 +5,12 @@
 // LED状态变量
 static uint led_flash_timer = 0;  // LED闪烁计时器
 
+/**
+ * @brief 系统时钟与安全模式初始化
+ *
+ * 配置系统时钟为 16MHz（内部振荡器），使能 USB 唤醒，
+ * 设置全局配置。SAFE_MOD 序列为解锁 CH552 安全寄存器。
+ */
 void system_init()
 {
     SAFE_MOD = 0x55;
@@ -15,6 +21,15 @@ void system_init()
     SAFE_MOD = 0x00;
 }
 
+/**
+ * @brief GPIO 引脚初始化
+ *
+ * 配置所有 I/O 引脚的工作模式：
+ * - P3.4(LED)：推挽输出
+ * - P3.0/P3.1/P3.3/P1.1/P1.5/P1.6/P1.7(矩阵扫描)：准双向口，使能上拉
+ * - P3.2(EC11_A)/P1.4(EC11_B)：准双向口输入，使能上拉
+ * 初始化所有矩阵扫描线为高电平。
+ */
 void gpio_init()
 {
     // LED引脚初始化 — P3.4 设为推挽输出
@@ -43,6 +58,14 @@ void gpio_init()
     K1 = 1; K2 = 1; K3 = 1; K4 = 1; K5 = 1; K6 = 1; K7 = 1;
 }
 
+/**
+ * @brief 定时器 T0 初始化（模式 2，8 位自动重装）
+ *
+ * 配置 Timer0 为 8 位自动重装模式（模式 2），
+ * TH0/TL0 = 0x06，每 250 个时钟周期溢出一次，
+ * 用于提供毫秒级延时基准（约 187.5µs/溢出）。
+ * 使能 Timer0 中断。
+ */
 void T0_init()
 {
     TMOD &= 0xF0;
@@ -56,6 +79,15 @@ void T0_init()
 
 volatile uchar t0_num = 0;
 
+/**
+ * @brief 毫秒级延时
+ *
+ * 基于 Timer0 溢出计数实现延时。
+ * 每个 Timer0 周期约 187.5µs，等待 4 次溢出（约 750µs）为 1 个基本单位。
+ * 同时喂狗（WDOG_COUNT 写入），防止看门狗超时复位。
+ *
+ * @param ms 延时毫秒数（实际每毫秒约 0.75ms，因 Timer0 周期近似）
+ */
 void delay_ms(uchar ms)
 {
     WDOG_COUNT = 0xF0 - ms / 5;
@@ -93,6 +125,19 @@ void led_handler(void)
     }
 }
 
+/**
+ * @brief 主函数
+ *
+ * 初始化流程：系统时钟 → GPIO → Timer0 → USB（全局中断使能）。
+ * 然后执行 20 轮 GPIO 预热扫描以稳定引脚电平。
+ *
+ * 主循环每轮执行：
+ * 1. LED 状态控制（USB 连接指示）
+ * 2. 键盘矩阵扫描与消抖状态机
+ * 3. EC11 旋转编码器处理
+ * 4. USB HID 报告发送（仅枚举完成后）
+ * 5. 延时约 1ms 以控制循环速率
+ */
 void main()
 {
     uchar i;
@@ -128,6 +173,12 @@ void main()
     }
 }
 
+/**
+ * @brief 定时器 T0 中断服务函数
+ *
+ * 每次 Timer0 溢出触发，递增 t0_num 计数器。
+ * t0_num 供 delay_ms() 做忙等待的时基。
+ */
 void T0_time() interrupt INT_NO_TMR0
 {
     TF0 = 0;

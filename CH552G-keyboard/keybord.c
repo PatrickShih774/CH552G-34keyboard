@@ -187,6 +187,12 @@ uchar is_multimedia_key(uchar key_code_val)
     return 0;
 }
 
+/**
+ * @brief 短延时（约 27 个指令周期）
+ *
+ * 用于矩阵扫描中每行切换后的等待，
+ * 确保 GPIO 电平稳定后再读取按键状态。
+ */
 void key_delay()
 {
     uchar i;
@@ -195,6 +201,16 @@ void key_delay()
         ;
 }
 
+/**
+ * @brief 7×? 矩阵键盘扫描
+ *
+ * 逐行拉低扫描线（K1~K6），读取其余线的电平状态。
+ * 采用二极管隔离的双向扫描，每行检测 6 个按键（K6 行检测 5 个），
+ * 共 35 个扫描位置，对应 key_code[0..34]。
+ *
+ * @note 仅返回最后检测到的按键（扫描序最大的一个），不支持 N 键 rollover。
+ * @return 按键索引（1~35），0 表示无按键
+ */
 uchar keybord_scanning()
 {
     uchar temp = 0;
@@ -442,6 +458,15 @@ uchar keybord_scanning()
     return temp;
 }
 
+/**
+ * @brief 4 级滑动窗口滤波器
+ *
+ * 将新采样值存入 4 级循环缓冲区，当所有 4 个值相等时
+ * 更新输出。用于键盘扫描的去抖动，滤除机械触点的毛刺。
+ *
+ * @param dat 当前采样值
+ * @return 滤波后的稳定值（4 次一致时为该值，否则保持上次稳定值）
+ */
 uchar filter(uchar dat)
 {
     static uchar idata tick = 0;
@@ -671,10 +696,29 @@ uchar keybord_trembling()
     return 0;
 }
 
+/**
+ * @brief 发送键盘 HID 报告
+ *
+ * 将 HIDKey 数组通过 USB EP2 发送给主机。
+ * 内部包含差分检测，数据未变化时不发送。
+ *
+ * @return 0 表示无变化未发送，1 表示已发送
+ */
 uchar HIDKey_transfer()
 {
     return drv_usb_keyboard(HIDKey);
 }
+
+/**
+ * @brief 发送多媒体 HID 报告（Consumer Page）
+ *
+ * 将 MULKey[0] 通过 USB EP2 发送给主机。
+ * 内部包含差分检测，数据未变化时不发送。
+ * 对于 Play/Pause 等按键，保持按下状态约 5 个主循环周期
+ * 以确保主机识别。
+ *
+ * @return 0 表示无变化未发送，1 表示已发送
+ */
 uchar MULKey_transfer()
 {
     static uchar tick = 0;
