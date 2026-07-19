@@ -155,6 +155,7 @@ sbit LED_STATUS = P3 ^ 4; // 状态指示灯
 #define HID_CONSUMER_CHROME        35  // 0x23 - Chrome
 #define HID_CONSUMER_MULTI         131 // 0x83 - Multi
 
+/** @brief 键盘 HID 报告缓冲区（8 字节：修饰键 + 保留 + 6 键码） */
 extern uchar HIDKey[8];
 /** @brief 多媒体按键值（0 表示无，非 0 表示 consumer usage 码） */
 extern uchar MULKey[1];
