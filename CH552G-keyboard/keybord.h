@@ -155,10 +155,35 @@ sbit LED_STATUS = P3 ^ 4; // 状态指示灯
 #define HID_CONSUMER_CHROME        35  // 0x23 - Chrome
 #define HID_CONSUMER_MULTI         131 // 0x83 - Multi
 
-/** @brief 键盘 HID 报告缓冲区（8 字节：修饰键 + 保留 + 6 键码） */
 extern uchar HIDKey[8];
 /** @brief 多媒体按键值（0 表示无，非 0 表示 consumer usage 码） */
 extern uchar MULKey[1];
+
+/* ========== 按键映射表结构体类型 ========== */
+
+/** @brief 修饰键映射表条目：按键码 + 修饰键 */
+typedef struct {
+    uchar key_code;   /**< HID 按键码 */
+    uchar modifier;   /**< 修饰键位图（HID_L_CTL 等） */
+} key_modifier_entry_t;
+
+/** @brief 重复次数映射表条目：key_code[] 索引 + 发送次数 */
+typedef struct {
+    uchar index;      /**< key_code[] 数组索引 */
+    uchar count;      /**< 连续发送次数 */
+} key_repeat_entry_t;
+
+/** @brief 纯修饰键映射表条目：key_code[] 索引 + 修饰键 */
+typedef struct {
+    uchar index;      /**< key_code[] 数组索引 */
+    uchar modifier;   /**< 修饰键位图 */
+} key_modifier_only_entry_t;
+
+/** @brief 长按支持映射表条目：key_code[] 索引 + 是否支持 */
+typedef struct {
+    uchar index;      /**< key_code[] 数组索引 */
+    uchar support;    /**< 1=支持长按连续发送 */
+} key_long_press_entry_t;
 
 /** @brief 7×? 矩阵扫描，返回按键索引（1~35，0=无） */
 uchar keybord_scanning(void);
@@ -180,7 +205,5 @@ uchar is_long_press_key(uchar key_index);
 uchar is_multimedia_key(uchar key_code_val);
 /** @brief EC11 旋转编码器处理（音量控制） */
 void ec11_handler(void);
-/** @brief 基于 Timer0 的毫秒级延时，同时喂狗 */
-void delay_ms(uchar ms);
 
 #endif

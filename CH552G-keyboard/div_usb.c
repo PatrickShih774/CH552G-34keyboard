@@ -358,20 +358,20 @@ void drv_usb_write_ep2(char *buf, uchar len)
  */
 uchar drv_usb_keyboard(uchar *p)
 {
-    static uchar idata temp[9] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
+    static keyboard_report_t idata temp = {1, 0, 0, {0}};
     uchar i;
     uchar flag = 0;
     for (i = 0; i < 8; i++)
     {
-        if (temp[i + 1] != p[i])
+        if (((uchar *)(&temp))[i + 1] != p[i])
         {
-            temp[i + 1] = p[i];
+            ((uchar *)(&temp))[i + 1] = p[i];
             flag = 1;
         }
     }
     if (flag)
     {
-        drv_usb_write_ep2(temp, 9);
+        drv_usb_write_ep2((uchar *)(&temp), 9);
     }
     return flag;
 }
@@ -389,22 +389,19 @@ uchar drv_usb_keyboard(uchar *p)
  */
 uchar drv_usb_mul(uchar dat, uchar force)
 {
-    // Consumer 报告：ReportID=3 + 16-bit usage（小端）。
-    // HID 描述符声明 Report ID 3 为 16-bit 单字段，故报告总长 3 字节。
-    // 之前发送 5 字节违反描述符，多余字节在严格主机上可能被误解析为下一报告。
-    static uchar idata temp[3] = {3, 0, 0};
+    static consumer_report_t idata temp = {3, 0, 0};
     uchar flag = 0;
 
-    if (force || temp[1] != dat)
+    if (force || temp.usage_lo != dat)
     {
-        temp[1] = dat;
-        temp[2] = 0; // usage 高字节（在用 usage 均 <= 0xFF）
+        temp.usage_lo = dat;
+        temp.usage_hi = 0; // usage 高字节（在用 usage 均 <= 0xFF）
         flag = 1;
     }
 
     if (flag)
     {
-        drv_usb_write_ep2(temp, 3);
+        drv_usb_write_ep2((uchar *)(&temp), 3);
     }
     return flag;
 }

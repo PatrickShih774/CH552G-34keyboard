@@ -15,15 +15,14 @@ uchar code key_code[35] =
 /**
  * @brief 按键修饰键映射表
  *
- * 为特定按键添加修饰键（Ctrl/Shift/Alt等），实现组合键功能
- * 格式：{按键码, 修饰键}
- * 修饰键为0表示无修饰键
+ * 为特定按键添加修饰键（Ctrl/Shift/Alt等），实现组合键功能。
+ * 修饰键为0表示无修饰键。
  *
  * 示例：
  * {HID_KEYBOARD_C, HID_L_CTL}  -> Ctrl+C 复制
  * {HID_KEYBOARD_V, HID_L_CTL}  -> Ctrl+V 粘贴
  */
-uchar code key_modifier_map[][2] =
+key_modifier_entry_t code key_modifier_map[] =
     {
         {HID_KEYBOARD_X, HID_L_CTL},   // Ctrl+X 复制
         {HID_KEYBOARD_C, HID_L_CTL},   // Ctrl+C 复制
@@ -35,16 +34,14 @@ uchar code key_modifier_map[][2] =
 /**
  * @brief 连续按键映射表
  *
- * 为特定按键设置连续发送次数
- * 格式：{key_code数组索引, 连续次数}
- * 次数为1表示正常单次按键
- * 使用索引而不是按键码，可以区分key_code中相同的按键
+ * 为特定按键设置连续发送次数。
+ * 使用索引而不是按键码，可以区分 key_code 中相同的按键（如两个 HID_KEYBPAD_0）。
  *
  * 示例：
  * {31, 2}  -> key_code[31]发送两次（两个0）
  * {30, 1}  -> key_code[30]发送一次（一个0）
  */
-uchar code key_repeat_map[][2] =
+key_repeat_entry_t code key_repeat_map[] =
     {
         {30, 1}, // 第一个HID_KEYBPAD_0，发送一次（一个0）
         {31, 2}, // 第二个HID_KEYBPAD_0，发送两次（两个0）
@@ -54,15 +51,11 @@ uchar code key_repeat_map[][2] =
 /**
  * @brief 纯修饰键映射表
  *
- * 标记哪些按键只发送修饰键，不发送按键码
- * 格式：{key_code数组索引, 修饰键}
- * 修饰键为0表示不是纯修饰键
+ * 标记哪些按键只发送修饰键，不发送按键码。修饰键为 0 表示不是纯修饰键。
  *
- * 示例：
- * {34, HID_L_WIN}  -> 只发送Win键（不带按键码）
- * 注意：索引34现在是多媒体按键(HID_CONSUMER_PLAY_PAUSE)，不再使用纯修饰键功能
+ * @note 索引34现在是多媒体按键(HID_CONSUMER_PLAY_PAUSE)，不再使用纯修饰键功能
  */
-uchar code key_modifier_only_map[][2] =
+key_modifier_only_entry_t code key_modifier_only_map[] =
     {
         // {34, HID_L_WIN}, // 注释掉：索引34现在是多媒体按键，通过MULKey_transfer发送
         {0, 0} // 结束标记
@@ -71,14 +64,12 @@ uchar code key_modifier_only_map[][2] =
 /**
  * @brief 长按连续发送映射表
  *
- * 标记哪些按键支持长按连续发送
- * 格式：{key_code数组索引, 1}
- * 值为1表示支持长按连续发送，0表示不支持
+ * 标记哪些按键支持长按连续发送。support=1 表示支持。
  *
  * 示例：
  * {1, 1}  -> HID_KEYBOARD_DELETE支持长按连续删除
  */
-uchar code key_long_press_map[][2] =
+key_long_press_entry_t code key_long_press_map[] =
     {
         {1, 1},  // DELETE键长按连续删除
         {24, 1}, // 方向键左长按连续左移
@@ -97,11 +88,11 @@ uchar code key_long_press_map[][2] =
 uchar is_long_press_key(uchar key_index)
 {
     uchar i = 0;
-    while (key_long_press_map[i][0] != 0)
+    while (key_long_press_map[i].index != 0)
     {
-        if (key_long_press_map[i][0] == key_index)
+        if (key_long_press_map[i].index == key_index)
         {
-            return key_long_press_map[i][1];
+            return key_long_press_map[i].support;
         }
         i++;
     }
@@ -117,11 +108,11 @@ uchar is_long_press_key(uchar key_index)
 uchar get_key_repeat_count(uchar key_index)
 {
     uchar i = 0;
-    while (key_repeat_map[i][0] != 0)
+    while (key_repeat_map[i].index != 0)
     {
-        if (key_repeat_map[i][0] == key_index)
+        if (key_repeat_map[i].index == key_index)
         {
-            return key_repeat_map[i][1];
+            return key_repeat_map[i].count;
         }
         i++;
     }
@@ -137,11 +128,11 @@ uchar get_key_repeat_count(uchar key_index)
 uchar get_modifier_only_key(uchar key_index)
 {
     uchar i = 0;
-    while (key_modifier_only_map[i][0] != 0)
+    while (key_modifier_only_map[i].index != 0)
     {
-        if (key_modifier_only_map[i][0] == key_index)
+        if (key_modifier_only_map[i].index == key_index)
         {
-            return key_modifier_only_map[i][1];
+            return key_modifier_only_map[i].modifier;
         }
         i++;
     }
@@ -157,11 +148,11 @@ uchar get_modifier_only_key(uchar key_index)
 uchar get_key_modifier(uchar key_code_val)
 {
     uchar i = 0;
-    while (key_modifier_map[i][0] != 0)
+    while (key_modifier_map[i].key_code != 0)
     {
-        if (key_modifier_map[i][0] == key_code_val)
+        if (key_modifier_map[i].key_code == key_code_val)
         {
-            return key_modifier_map[i][1];
+            return key_modifier_map[i].modifier;
         }
         i++;
     }
