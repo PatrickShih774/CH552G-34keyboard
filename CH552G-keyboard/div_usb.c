@@ -308,8 +308,16 @@ void drv_usb_write_ep2(char *buf, uchar len)
     // 注意必须加括号：== 优先级高于 &，原写法 UEP2_CTRL & MASK == ACK
     // 会被解析为 UEP2_CTRL & (MASK == ACK) => UEP2_CTRL & 0 => while(0)，
     // 等待逻辑完全失效，可能导致连续发送时覆盖正在传输的缓冲区，主机收到 CRC 错误包（xact error）。
-    while ((UEP2_CTRL & MASK_UEP_T_RES) == UEP_T_RES_ACK)
-        ;
+    // 超时保护：若主机未轮询 EP2（枚举未完成、主机挂起或断连），TX 永不完成，
+    // T_RES 恒为 ACK 会死锁主循环。超时后放弃本次发送，待主机恢复轮询后自愈。
+    {
+        uint timeout = 10000;
+        while ((UEP2_CTRL & MASK_UEP_T_RES) == UEP_T_RES_ACK)
+        {
+            if (--timeout == 0)
+                return;
+        }
+    }
 
     len = (len > EP2_SIZE) ? EP2_SIZE : len;
     memcpy(buf_ep2, buf, len);
@@ -352,32 +360,29 @@ dat:对应多媒体的按键功能码
 带差分检测，数据不相同才上传
 返回值:无差异为0，反之为1
 *******************************/
-uchar drv_usb_mul(uchar dat)
+uchar drv_usb_mul(uchar dat, uchar force)
 {
-    static uchar idata temp[5] = {3, 0, 0, 0, 0};
+    // Consumer 报告：ReportID=3 + 16-bit usage（小端）。
+    // HID 描述符声明 Report ID 3 为 16-bit 单字段，故报告总长 3 字节。
+    // 之前发送 5 字节违反描述符，多余字节在严格主机上可能被误解析为下一报告。
+    static uchar idata temp[3] = {3, 0, 0};
     uchar flag = 0;
 
-    if (temp[1] != dat)
+    if (force || temp[1] != dat)
     {
         temp[1] = dat;
+        temp[2] = 0; // usage 高字节（在用 usage 均 <= 0xFF）
         flag = 1;
     }
 
     if (flag)
     {
-        if (dat == HID_CONSUMER_CALCULATOR || dat == HID_CONSUMER_MULTI)
-            temp[2] = 0x01;
-        else if (dat == HID_CONSUMER_CHROME)
-            temp[2] = 0x02;
-        else
-            temp[2] = 0x00;
-        drv_usb_write_ep2(temp, 5);
+        drv_usb_write_ep2(temp, 3);
     }
     return flag;
 }
 
-volatile bit num_lock = 0;
-volatile bit caps_lock = 0;
+// LED 状态通过 SET_REPORT 输出报告接收，见 UIS_TOKEN_OUT | 0 处理
 
 void usb_handler(void) interrupt INT_NO_USB using 1
 {
@@ -682,18 +687,8 @@ void usb_handler(void) interrupt INT_NO_USB using 1
             break;
 
         case UIS_TOKEN_OUT | 0:
-            if (USB_RX_LEN == 2 && buf_ep0[0] == 1)
-            {
-                if (buf_ep0[1] & 1)
-                    num_lock = 1;
-                else
-                    num_lock = 0;
-
-                if (buf_ep0[1] & 2)
-                    caps_lock = 1;
-                else
-                    caps_lock = 0;
-            }
+            // 主机 SET_REPORT 输出报告（Report ID 1，键盘 LED 状态）。
+            // 固件不驱动 LED 指示，仅按协议 ACK 该输出报告。
             UEP0_CTRL ^= bUEP_R_TOG;
             break;
 

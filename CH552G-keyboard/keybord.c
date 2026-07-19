@@ -176,10 +176,13 @@ uchar get_key_modifier(uchar key_code_val)
  */
 uchar is_multimedia_key(uchar key_code_val)
 {
-    // 多媒体按键的值范围通常是 0x80 以上（Consumer Page）
-    // HID键盘按键范围是 0-127 (0x00-0x7F)
-    // 多媒体按键范围是 128-255 (0x80-0xFF)
-    if (key_code_val >= 128)
+    // 显式判断当前在用的 Consumer Page usage。
+    // 之前用 >=128 阈值会把 0x6F(Brightness+) / 0x70(Brightness-) 等
+    // 值 <128 的合法 consumer usage 误判为键盘键码。
+    if (key_code_val == HID_CONSUMER_PLAY_PAUSE ||
+        key_code_val == HID_CONSUMER_VOLUME_UP ||
+        key_code_val == HID_CONSUMER_VOLUME_DOWN ||
+        key_code_val == HID_CONSUMER_MUTE)
         return 1;
     return 0;
 }
@@ -194,7 +197,6 @@ void key_delay()
 
 uchar keybord_scanning()
 {
-    static uchar idata temp_old = 0;
     uchar temp = 0;
     uchar num = 0;
     K1 = K2 = K3 = K4 = K5 = K6 = K7 = 1;
@@ -437,10 +439,7 @@ uchar keybord_scanning()
     }
 
     K6 = 1;
-    // end:
-    //     if (num <= 1)
-    temp_old = temp;
-    return temp_old;
+    return temp;
 }
 
 uchar filter(uchar dat)
@@ -597,7 +596,7 @@ uchar keybord_trembling()
             {
                 long_press_timer++;
 
-                // 长按超过1000ms（1秒）才开始连续发送
+                // 长按超过约750ms（1000个主循环周期）才开始连续发送
                 if (long_press_timer > 1000)
                 {
                     long_press_started = 1;
@@ -680,7 +679,7 @@ uchar MULKey_transfer()
 {
     static uchar tick = 0;
     uchar flag;
-    flag = drv_usb_mul(MULKey[0]);
+    flag = drv_usb_mul(MULKey[0], 0); // 非强制，走差分检测
 
     if (MULKey[0]) // 确保触发一次会持续5ms
     {
@@ -700,6 +699,11 @@ uchar MULKey_transfer()
  * 检测编码器旋转方向，发送音量控制按键
  * 顺时针旋转：音量增加
  * 逆时针旋转：音量减少
+ *
+ * 每个有效档位生成一次完整的 press -> release 事件：
+ * 强制发送按下（usage），随后立即强制发送释放（0）。
+ * 使用 force 绕过 drv_usb_mul 的差分检测，避免同方向连续旋转时
+ * 第二个事件因 usage 未变化而被差分逻辑丢弃。
  */
 void ec11_handler(void)
 {
@@ -724,10 +728,6 @@ void ec11_handler(void)
         {
             debounce = 0;
 
-            // 判断旋转方向
-            // 顺时针：00->01->11->10->00 或 00->10->11->01->00
-            // 逆时针：00->10->11->01->00 或 00->01->11->10->00
-
             // 使用状态表判断方向
             // 顺时针状态转换：0->1->3->2->0 (二进制: 00->01->11->10->00)
             // 逆时针状态转换：0->2->3->1->0 (二进制: 00->10->11->01->00)
@@ -744,16 +744,22 @@ void ec11_handler(void)
             // 顺时针判断
             if (transition == 0x01 || transition == 0x13 || transition == 0x32 || transition == 0x20)
             {
-                // 顺时针旋转 - 音量增加
-                MULKey[0] = HID_CONSUMER_VOLUME_UP;
-                MULKey_transfer();
+                // 顺时针旋转 - 音量增加，每个档位发送完整的 press+release
+                if (Ready)
+                {
+                    drv_usb_mul(HID_CONSUMER_VOLUME_UP, 1); // 强制按下
+                    drv_usb_mul(0, 1);                       // 强制释放（阻塞至按下发送完成）
+                }
             }
             // 逆时针判断
             else if (transition == 0x02 || transition == 0x23 || transition == 0x31 || transition == 0x10)
             {
                 // 逆时针旋转 - 音量减少
-                MULKey[0] = HID_CONSUMER_VOLUME_DOWN;
-                MULKey_transfer();
+                if (Ready)
+                {
+                    drv_usb_mul(HID_CONSUMER_VOLUME_DOWN, 1); // 强制按下
+                    drv_usb_mul(0, 1);                         // 强制释放
+                }
             }
         }
     }

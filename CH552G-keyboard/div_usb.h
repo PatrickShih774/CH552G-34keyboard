@@ -19,7 +19,7 @@
 
 void drv_usb_init(void);
 uchar drv_usb_keyboard(uchar *p);
-uchar drv_usb_mul(uchar dat);
+uchar drv_usb_mul(uchar dat, uchar force);
 
 // USB连接状态变量（定义在div_usb.c中）
 extern uchar idata Ready;

@@ -125,7 +125,7 @@ CH554EVT/               # CH554 参考示例代码
 ### USB HID 描述符
 
 - **Report ID 1** — 标准键盘输入报告（9字节）：报告ID + 修饰键 + 保留 + 6个键码
-- **Report ID 3** — Consumer 多媒体控制报告（4字节）：报告ID + 功能码
+- **Report ID 3** — Consumer 多媒体控制报告（3字节）：报告ID + 16位 usage
 - **VID**: 0x3062 | **PID**: 0x4700
 
 ## 许可证
@@ -182,6 +182,47 @@ CH554EVT/               # CH554 参考示例代码
 - 移除主循环中 `state == KEY_STATE_RELEASED` 的冗余判断
 - 移除未调用的测试函数 `send_H()`、`sendHello()`、`drv_usb_dial()`（消除 Keil L16 "UNCALLED SEGMENT" 警告，精简 code 体积约 200+ 行）
 - 加固 `PRESSED` 状态守卫：`temp <= 35` → `temp > 0 && temp <= 35`，防止 `temp=0` 时 `key_code[temp-1]` 数组越界读取随机键码
+
+## 已知问题修复 (v1.2)
+
+> 以下问题于 2026-07 通过代码审查发现并修复。
+
+### 修复 #7：EC11 编码器快速旋转丢失事件（高置信度）
+
+**根因**：`ec11_handler()` 把旋转事件交给 `MULKey_transfer()` → `drv_usb_mul()` 发送，而后者带差分检测（`temp[1] != dat` 才发送）且 `MULKey_transfer()` 在 5 个主循环后清零 `MULKey[0]`。同方向连续旋转间隔小于约 5ms 时，第二次事件的 usage 与第一次相同，差分逻辑判定"无变化"直接丢弃；同时 5 周期保持把 `MULKey[0]` 清零，反而触发提前释放。表现为快速拧编码器时音量只增减一档。
+
+**修复**：编码器事件改为直接调用 `drv_usb_mul(usage, 1)`（新增 `force` 参数，跳过差分检测），并在同一轮立即调用 `drv_usb_mul(0, 1)` 发送释放，形成完整的 press→release 事件。每个档位独立触发一次，连续旋转不再被吞。
+
+### 修复 #8：EP2 发送等待可能死锁主循环（高置信度）
+
+**根因**：`drv_usb_write_ep2()` 中 `while ((UEP2_CTRL & MASK_UEP_T_RES) == UEP_T_RES_ACK)` 无超时。该循环等待上一包 TX 完成（ISR 把 T_RES 置 NAK），但 TX 完成依赖主机轮询 EP2。若主机未轮询（枚举期间尚未 `SET_CONFIGURATION`，或主机挂起/断连），T_RES 恒为 ACK，主循环永久卡死；看门狗若禁用（默认）则无法恢复。主循环未用 `Ready` 门控 `HIDKey_transfer()`，故上电后第一次按键即在枚举期间触发死锁。
+
+**修复**：
+1. `drv_usb_write_ep2()` 等待循环加超时（约 5ms），超时后放弃本次发送，待主机恢复轮询后自愈；
+2. 主循环用 `if (Ready)` 门控 `HIDKey_transfer()` / `MULKey_transfer()`，仅在枚举完成后发送 EP2 报告。
+
+### 修复 #9：Consumer 报告长度与 HID 描述符不符（高置信度）
+
+**根因**：HID 描述符声明 Report ID 3 为 16-bit 单字段（共 3 字节：ReportID + 2 字节 usage），但 `drv_usb_mul()` 发送 5 字节 `[3, dat, temp[2], 0, 0]`。多余 2 字节在严格主机上可能被误解析为下一个报告的 Report ID。同时 `temp[2]` 的 selector 逻辑（对 Calculator/Multi 设 0x01、Chrome 设 0x02）会把 16-bit usage 从 `0x0092` 破坏为 `0x0192`，发出错误的消费码（所幸这些键未在 `key_code` 中使用）。
+
+**修复**：`drv_usb_mul()` 改为发送 3 字节 `[3, dat_lo, 0]`，移除 `temp[2]` selector 死逻辑。在用的 usage（Volume Up/Down、Play/Pause、Mute）均 ≤ 0xFF，高字节为 0。
+
+### 修复 #10：`is_multimedia_key()` 阈值误判（中置信度）
+
+**根因**：`is_multimedia_key()` 用 `>= 128` 判断是否为 Consumer Page usage。但 Consumer Page 中 `Brightness+ (0x6F=111)`、`Brightness- (0x70=112)` 等合法 usage 的值 < 128，会被误判为键盘键码（实际未使用，属潜在隐患）。
+
+**修复**：改为显式枚举当前在用的 consumer usage 集合（Play/Pause、Volume Up/Down、Mute）。
+
+### 代码清理（v1.2）
+
+- 移除未使用的 `num_lock` / `caps_lock` 变量及其赋值（保留 `SET_REPORT` 输出报告的协议 ACK）。
+- 移除 `keybord_scanning()` 中无意义的 `temp_old` 静态变量，直接 `return temp`。
+- 修正 `delay_ms()` / 长按计时的注释（Timer0 每 250 计数溢出、4 次为一周，`delay_ms(1)` 实际约 0.75ms；长按阈值 1000 个主循环周期约 750ms）。
+
+## 已知限制
+
+- **单键检测**：`keybord_scanning()` 每轮只返回一个按键（扫描序最大的一个），不支持 N 键 rollover。同时按下两键仅识别一个。因本键盘无 Shift 键、组合键（Ctrl+C/X/V、Alt+Tab）通过 `key_modifier_map` 单键映射实现，故不影响这些组合键功能。如需多键同时按下需重构扫描与状态机。
+- **编码器与 Play/Pause 同时触发**：两者共用 Consumer 报告通道，极端情况下同时操作会短暂相互打断（约 1ms），属可接受边界。
 
 ## 致谢
 

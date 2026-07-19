@@ -116,8 +116,13 @@ void main()
         keybord_trembling();     // 键盘消抖与按键处理
         ec11_handler();          // EC11旋转编码器处理
 
-        if (!HIDKey_transfer())  // 发送键盘报告
-            MULKey_transfer();   // 发送多媒体报告（错开更新）
+        // 仅在 USB 枚举完成后发送 EP2 报告，避免主机未轮询 EP2 时
+        // drv_usb_write_ep2 的等待逻辑死锁主循环。
+        if (Ready)
+        {
+            if (!HIDKey_transfer())  // 发送键盘报告
+                MULKey_transfer();   // 发送多媒体报告（错开更新）
+        }
 
         delay_ms(1);
     }
