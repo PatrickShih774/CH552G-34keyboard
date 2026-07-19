@@ -89,11 +89,12 @@
 
 ```
 CH552G-keyboard/
-├── main.c              # 主程序：系统初始化、主循环
+├── main.c              # 主程序：主循环（仅 ~50 行，初始化模块已分离）
+├── init.c / init.h     # 初始化模块：时钟/GPIO/Timer0/LED/延时
 ├── keybord.c           # 键盘扫描、消抖、HID映射、EC11处理
-├── keybord.h           # 键盘相关定义与函数声明
+├── keybord.h           # 键盘相关定义、映射表结构体类型、函数声明
 ├── div_usb.c           # USB HID驱动（键盘+多媒体报告）
-├── div_usb.h           # USB配置（VID/PID、端点定义）
+├── div_usb.h           # USB配置（VID/PID、端点定义）、HID报告结构体
 ├── STARTUP.A51         # Keil C51 启动代码
 ├── CH551.H             # CH551/CH552G 寄存器头文件
 ├── 64keybord.uvproj    # Keil 项目文件
@@ -218,6 +219,12 @@ CH554EVT/               # CH554 参考示例代码
 - 移除未使用的 `num_lock` / `caps_lock` 变量及其赋值（保留 `SET_REPORT` 输出报告的协议 ACK）。
 - 移除 `keybord_scanning()` 中无意义的 `temp_old` 静态变量，直接 `return temp`。
 - 修正 `delay_ms()` / 长按计时的注释（Timer0 每 250 计数溢出、4 次为一周，`delay_ms(1)` 实际约 0.75ms；长按阈值 1000 个主循环周期约 750ms）。
+
+### 代码重构（v1.2）
+
+- **初始化模块分离**：创建 `init.c` / `init.h`，将 `main.c` 中的 `system_init`、`gpio_init`、`T0_init`、`delay_ms`、`led_handler`、`T0_time` 及全局 `t0_num` 移入独立模块。`main.c` 精简至仅 ~50 行，专注主循环逻辑。
+- **映射表改用结构体数组**：`key_modifier_map`、`key_repeat_map`、`key_long_press_map`、`key_modifier_only_map` 从 `uchar code map[][2]` 二维数组改为 `key_modifier_entry_t code map[]` 等结构体数组。查找函数用 `.key_code`、`.modifier`、`.index`、`.count`、`.support` 字段访问，替代 `[i][0]` / `[i][1]` 下标，代码自文档化。
+- **USB 报告结构体类型**：`div_usb.h` 新增 `keyboard_report_t`（9 字节，对应 Report ID 1）和 `consumer_report_t`（3 字节，对应 Report ID 3）结构体类型。`drv_usb_keyboard()` 和 `drv_usb_mul()` 内部临时缓冲区改用结构体变量，字段访问替代数组下标。
 
 ## 已知限制
 
